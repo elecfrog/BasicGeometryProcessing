@@ -4,6 +4,7 @@
 #include "Cartesian3.h"
 #include "AttributedObject.h"
 #include <vector>
+#include <deque>
 
 // Half Edge Vertex Definition
 struct HEVertex
@@ -16,11 +17,13 @@ struct HEVertex
         position = _position;
         fd_edgeID = _fd_edgeID;
     }
+
     HEVertex(vec3 _position)
     {
         position = _position;
         fd_edgeID = -1;
     }
+
     HEVertex()
     {
         position = vec3();
@@ -101,6 +104,41 @@ public:
     void BuildOtherHalfs();
     void BuildFirstDirectedEdges();
 
+
+    /***********************
+     * Find shortest path implenmented by Dijkstra's algorithm
+     * minimal spanning tree on the triangular mesh
+     * Part 1 of Coursework_1 of DGP -> https://ustc-gcl-f.github.io/course/2020_Spring_DGP/index.html
+     * return with a vertex path queue.
+     ************************/    
+    struct DijkstraVert
+    {
+        /* data */
+        bool tagged;
+        float disance_fromStart;
+        unsigned int prev_ID;
+    };
+    std::deque<unsigned int> FindShortestPath_Dijkstra(unsigned int start_vertID, unsigned int target_vertID);
+    struct GraphNode
+    {
+        unsigned int from_ID;
+        unsigned int goto_ID;
+        float length;
+        GraphNode( unsigned int _from_ID, unsigned int _goto_ID, float _length){from_ID = _from_ID, goto_ID = _goto_ID; length = _length;}
+        bool operator < (const GraphNode& node) const
+        {
+            return (length < node.length);
+        }
+    };
+    std::vector<GraphNode> BuildCompelteGraph(std::deque<unsigned int> vertices);
+    std::vector<GraphNode> CompelteGraphSortedUp(std::vector<GraphNode>);
+
+    std::vector<GraphNode> BuildMST_Kruskal(std::vector<GraphNode> completeGraph);
+    bool isRing(std::vector<GraphNode> subGraph);
+//    inline bool operator() (const GraphNode& node_1, const GraphNode& node_2)
+//    {
+//        return (node_1.length < node_2.length);
+//    }
     // get neighbors around a vertex. It should return its neighbors and the degree of this vertex
     std::vector<unsigned int> FindNeighbors(unsigned int vertID);
 
