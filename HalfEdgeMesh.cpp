@@ -1,5 +1,9 @@
 #include "HalfEdgeMesh.h"
 
+#include <limits>
+#include <map>
+#include <algorithm>
+
 // default constructor, actually, it could be deleted.
 HalfEdgeMesh::HalfEdgeMesh()
 {
@@ -63,6 +67,7 @@ void HalfEdgeMesh::Pairing()
     // }
     // std::cout<< std::endl;
 
+    BuildCompelteGraph(FindShortestPath_Dijkstra(497,525));
 }
 
 
@@ -121,7 +126,130 @@ void HalfEdgeMesh::BuildFirstDirectedEdges()
     }
 }
 
-std::vector<unsigned int> HalfEdgeMesh::FindNeighbors(unsigned int vertID) 
+std::deque<unsigned int> HalfEdgeMesh::FindShortestPath_Dijkstra(unsigned int start_vertID, unsigned int target_vertID)
+{
+    // initalize this table size as the vertices size of the model
+    std::vector<DijkstraVert> d_verts;
+
+    d_verts.resize(this->verts.size());
+
+    // initalize the table, each vertex: disance_fromStart = inf,  tagged = false, prev_ID = start_vertID
+    for(unsigned int v_d = 0; v_d< this->verts.size(); v_d++)
+    {
+        d_verts[v_d].tagged = false;
+        d_verts[v_d].disance_fromStart = std::numeric_limits<float>::infinity();
+        d_verts[v_d].prev_ID = start_vertID;
+    }
+    // Set the start vertex with tagged = true, disance_fromStart = 0;
+    d_verts[start_vertID].tagged = true;
+    d_verts[start_vertID].disance_fromStart = 0;
+
+    auto curr = start_vertID;
+    while(d_verts[target_vertID].tagged == false)
+    {
+        // find neigbors of the current vertex, 
+        auto neigbors = FindNeighbors(curr);
+        // and loop them to record the distance from the start, and choose the smallest one as the next vertex should be used
+        for(auto& n: neigbors)
+        {
+            // if this neighbor is not tagged, it should compute the distance
+            if(d_verts[n].tagged == false)
+            {
+                float distance = (verts[curr].position - verts[n].position).length();
+                // if this vertex never updated, the prev_ID is start_vertID, that means d_verts[d_verts[n].prev_ID].disance_fromStart == 0
+                // else if this vertex has updated, the prev_ID is the real previous vertex ID.
+                d_verts[n].disance_fromStart = distance + d_verts[d_verts[n].prev_ID].disance_fromStart; 
+                d_verts[n].prev_ID = curr;
+            }
+            // else ignore this neighbor, test next neighbor
+            else continue;
+        }
+        // now, to find the smallest vertexID, exclude tagged vertices
+        float smallest   = std::numeric_limits<float>::infinity();
+        unsigned int smallestID = 0; 
+        for(unsigned int v = 0 ; v< d_verts.size(); ++v)
+        {
+            if(d_verts[v].disance_fromStart < smallest && d_verts[v].tagged == false)
+            {
+                smallest = d_verts[v].disance_fromStart;
+                smallestID = v;
+            }
+        }
+
+        // tag this vertex as true, and set it as the next visit vertex
+        d_verts[smallestID].tagged = true; 
+        curr = smallestID;
+    }
+
+    // make an output
+    std::deque<unsigned int> res_list;
+    unsigned int output = target_vertID;
+    res_list.push_front(output);
+    do 
+    {
+        output = d_verts[output].prev_ID;
+        res_list.push_front(output);
+    }
+    while(output!=start_vertID);
+    
+    // std::vector<unsigned int> res;
+    // for(auto&r: res_list)
+    // {
+    //     res.emplace_back(r);
+    // }
+//    for(auto&r: res_list)
+//        std::cout <<"v"<< r << std::endl;
+    return res_list;
+}
+
+std::vector<HalfEdgeMesh::GraphNode> HalfEdgeMesh::BuildCompelteGraph(std::deque<unsigned int> _vertices)
+{
+    auto vertices = _vertices;
+    std::vector<GraphNode> completeGraph;
+
+    while( vertices.size() > 1)
+    {
+        vertices.front();
+        for(unsigned int v = 1; v< vertices.size(); v++)
+        {
+            completeGraph.emplace_back(GraphNode(vertices.front(), vertices[v], (verts[vertices.front()].position - verts[vertices[v]].position).length()));
+        }
+        vertices.pop_front();
+    }
+
+    std::sort(completeGraph.begin(), completeGraph.end());
+
+    for (const auto& c : completeGraph)
+    {
+        std::cout << c.from_ID << " -> " << c.goto_ID  << " length =" << c.length << "\n";
+    }
+    
+    std::map<unsigned int, unsigned int> tree_list;
+
+    for(auto&v : _vertices)
+        tree_list.insert({v,v});
+
+    for(auto&node : completeGraph)
+    {
+        auto& value_from = node.from_ID;
+        auto& value_goto = node.goto_ID;
+        // std::cout<<"key" << value_from << " value" <<  value_goto << std::endl;
+        if(tree_list[node.from_ID] == tree_list[node.goto_ID])
+        {
+            continue;
+        }
+        else tree_list[value_goto] = value_from;
+    }
+
+    for(auto&node : tree_list)
+    {
+        std::cout<<"key" << node.first << " value" <<  node.second << std::endl;
+    }
+
+    return completeGraph;
+}
+
+std::vector<unsigned int> HalfEdgeMesh::FindNeighbors(unsigned int vertID)
 {
     // return this as an array, the size is the degree of thie vertex
     std::vector<unsigned int> neighbors;
@@ -148,6 +276,26 @@ std::vector<unsigned int> HalfEdgeMesh::FindNeighbors(unsigned int vertID)
 std::vector<unsigned int> HalfEdgeMesh::FindPinchVertices(unsigned int vertID)
 {
     return std::vector<unsigned int>();
+}
+
+std::vector<HalfEdgeMesh::GraphNode> HalfEdgeMesh::BuildMST_Kruskal(std::vector<GraphNode> completeGraph)
+{
+    std::vector<GraphNode> res;
+    for(auto&node : completeGraph)
+    {
+        std::vector<GraphNode> tmp = res;
+        tmp.emplace_back(node);
+        if(!isRing(tmp))
+        {
+            res.emplace_back(node);
+        }
+    }
+    return std::vector<GraphNode>();
+}
+
+bool HalfEdgeMesh::isRing(std::vector<GraphNode> subGraph)
+{
+    return false;
 }
 
 void HalfEdgeMesh::PrintEdges()
